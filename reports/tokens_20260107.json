@@ -1,0 +1,18 @@
+[
+  {
+    "username": "ghx",
+    "user_id": 128958,
+    "account_quota_raw": 62500000,
+    "account_quota_usd": 125.0,
+    "token_name": "cc",
+    "token_key": "sk-h3xeouns5M80uX5m1GQBb0TVOUpAm1lunWNmgaG86NFnh9EX",
+    "token_quota_raw": 50000000,
+    "token_quota_usd": 100.0,
+    "used_quota_raw": 0,
+    "used_quota_usd": 0.0,
+    "status": 1,
+    "expired_time": -1,
+    "created_time": 1767790968,
+    "checkin_success": true
+  }
+]

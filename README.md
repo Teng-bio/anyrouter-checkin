@@ -12,6 +12,9 @@
 - ✅ 随机延迟防检测（可配置）
 - ✅ 完整的日志记录
 - ✅ 支持 Linux Cron 定时任务
+- ✅ **自动获取账户余额和令牌信息**
+- ✅ **生成汇总报告（CSV/JSON）**
+- ✅ **按额度自动分类令牌密钥**
 
 ## 项目结构
 
@@ -29,6 +32,14 @@ anyrouter-checkin/
 │   ├── checkin_YYYYMMDD.log      # 每日日志
 │   ├── batch1.log                # 批次1 cron 日志
 │   └── batch2.log                # 批次2 cron 日志
+├── reports/                       # 报告目录（自动创建）
+│   ├── summary_YYYYMMDD.csv      # CSV 汇总报告
+│   ├── tokens_YYYYMMDD.json      # JSON 完整数据
+│   ├── keys_YYYYMMDD.txt         # 所有令牌（按额度分组）
+│   └── keys/                     # 按额度分类的令牌文件
+│       ├── keys_100usd.txt       # $100 额度令牌
+│       ├── keys_50usd.txt        # $50 额度令牌
+│       └── keys_10usd.txt        # $10 额度令牌
 └── screenshots/                   # 截图目录（调试用，自动创建）
 ```
 
@@ -109,6 +120,9 @@ python checkin_playwright.py
 
 # 使用指定配置文件运行
 python checkin_playwright.py -c config/batch1.json
+
+# 在 CSV 报告中显示完整令牌密钥
+python checkin_playwright.py --show-keys
 ```
 
 **首次测试建议：**
@@ -184,7 +198,7 @@ crontab -e
 crontab -l
 ```
 
-### 6. 查看日志
+### 6. 查看日志和报告
 
 ```bash
 # 查看今天的签到日志
@@ -196,6 +210,65 @@ tail -f logs/checkin_$(date +%Y%m%d).log
 # 查看批次日志
 tail -f logs/batch1.log
 tail -f logs/batch2.log
+```
+
+## 报告和令牌管理
+
+签到完成后会自动生成以下报告：
+
+### 报告文件
+
+| 文件 | 说明 | 权限 |
+|------|------|------|
+| `reports/summary_YYYYMMDD.csv` | CSV 汇总表（令牌脱敏） | 644 |
+| `reports/tokens_YYYYMMDD.json` | JSON 完整数据 | 600 |
+| `reports/keys_YYYYMMDD.txt` | 所有令牌（按额度分组） | 600 |
+| `reports/keys/keys_100usd.txt` | $100 额度令牌 | 600 |
+| `reports/keys/keys_50usd.txt` | $50 额度令牌 | 600 |
+
+### 提取令牌
+
+```bash
+# 提取所有 $100 额度的令牌
+cat reports/keys/keys_100usd.txt
+
+# 提取所有 $50 额度的令牌
+cat reports/keys/keys_50usd.txt
+
+# 查看所有令牌（按额度分组）
+cat reports/keys_$(date +%Y%m%d).txt
+
+# 用 jq 从 JSON 提取所有令牌
+cat reports/tokens_$(date +%Y%m%d).json | jq -r '.[].token_key'
+
+# Python 读取 JSON
+python3 -c "
+import json
+with open('reports/tokens_$(date +%Y%m%d).json') as f:
+    for t in json.load(f):
+        print(f\"{t['username']}: {t['token_key']} (\${t['token_quota_usd']})\")
+"
+```
+
+### JSON 数据结构
+
+```json
+{
+  "username": "user1",
+  "user_id": 128958,
+  "account_quota_raw": 62500000,
+  "account_quota_usd": 125.0,
+  "token_name": "main",
+  "token_key": "sk-xxxx...",
+  "token_quota_raw": 50000000,
+  "token_quota_usd": 100.0,
+  "used_quota_raw": 0,
+  "used_quota_usd": 0.0,
+  "status": 1,
+  "expired_time": -1,
+  "created_time": 1767790968,
+  "checkin_success": true
+}
 ```
 
 ## 常用命令速查
@@ -210,8 +283,17 @@ python checkin_playwright.py
 # 运行签到（指定配置）
 python checkin_playwright.py -c config/batch1.json
 
+# 在 CSV 中显示完整令牌
+python checkin_playwright.py --show-keys
+
 # 查看今日日志
 cat logs/checkin_$(date +%Y%m%d).log
+
+# 提取 $100 额度令牌
+cat reports/keys/keys_100usd.txt
+
+# 查看 CSV 报告
+cat reports/summary_$(date +%Y%m%d).csv
 
 # 查看 crontab
 crontab -l
@@ -225,10 +307,9 @@ crontab -e
 ```
 ============================================================
 AnyRouter 自动签到脚本 (Playwright 版本)
-运行时间: 2026-01-07 16:30:00
+运行时间: 2026-01-07 22:08:32
 配置文件: config/accounts.json
 ============================================================
-⏭️  跳过 14 个无效账号: 账号2, 账号3, ...
 共加载 1 个有效账号
 账号间延迟: 300-600 秒
 无头模式: 是
@@ -237,17 +318,15 @@ AnyRouter 自动签到脚本 (Playwright 版本)
 ==================================================
 开始处理账号: ghx
 ==================================================
-2026-01-07 16:30:01 [INFO] 正在启动浏览器...
-2026-01-07 16:30:02 [INFO] ✅ 浏览器启动成功 (视口: 1456x892)
-2026-01-07 16:30:02 [INFO] 使用代理: http://127.0.0.1:7890
-2026-01-07 16:30:05 [INFO] 正在登录账号: ghx
-2026-01-07 16:30:10 [INFO] ✅ 登录成功: ghx
-2026-01-07 16:30:12 [INFO]    用户ID: 104536
-2026-01-07 16:30:12 [INFO]    当前额度: 1000000
-2026-01-07 16:30:15 [INFO] 正在执行签到...
-2026-01-07 16:30:16 [INFO] ✅ API 签到成功! 获得 500 额度
-2026-01-07 16:30:17 [INFO]    额度变化: 1000000 → 1000500 (+500)
-2026-01-07 16:30:17 [INFO] 浏览器已关闭
+✅ 浏览器启动成功 (视口: 1835x1028)
+正在登录账号: ghx
+✅ 登录成功: ghx
+   用户ID: 128958
+   账户余额: $125.00
+   令牌: cc (余额: $100.00, 密钥: sk-h3xe****h9EX)
+正在执行签到...
+✅ API 签到成功!
+浏览器已关闭
 
 ============================================================
 签到完成!
@@ -255,7 +334,32 @@ AnyRouter 自动签到脚本 (Playwright 版本)
 成功: 1 个
 失败: 0 个
 ============================================================
+
+📊 报告已生成:
+   汇总表格: reports/summary_20260107.csv
+   完整数据: reports/tokens_20260107.json
+   所有令牌: reports/keys_20260107.txt
+   按额度分类:
+      $100: 1 个令牌 → keys_100usd.txt
 ```
+
+## 多令牌支持
+
+一个账号可以有多个令牌，脚本会自动识别并处理所有令牌：
+
+```
+==================================================
+开始处理账号: user1
+==================================================
+✅ 登录成功: user1
+   用户ID: 128958
+   账户余额: $125.00
+   令牌: main (余额: $100.00, 密钥: sk-aaaa****bbbb)
+   令牌: test (余额: $50.00, 密钥: sk-cccc****dddd)
+   令牌: dev (余额: $10.00, 密钥: sk-eeee****ffff)
+```
+
+每个令牌会根据其额度分别归类到对应文件中。
 
 ## 无效账号自动跳过
 
@@ -307,10 +411,11 @@ AnyRouter 自动签到脚本 (Playwright 版本)
 
 ## 安全建议
 
-1. **不要将配置文件提交到 Git**
+1. **不要将配置文件和报告提交到 Git**
    ```bash
    echo "config/accounts.json" >> .gitignore
    echo "config/batch*.json" >> .gitignore
+   echo "reports/" >> .gitignore
    ```
 
 2. **保护配置文件权限**

@@ -18,9 +18,11 @@ import time
 import random
 import logging
 import argparse
+import csv
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
 
 # 配置日志
@@ -424,10 +426,16 @@ class AnyRouterCheckin:
         try:
             result = self.page.evaluate("""
                 async () => {
+                    // 从 localStorage 获取用户 ID
+                    const userStr = localStorage.getItem('user');
+                    const user = userStr ? JSON.parse(userStr) : null;
+                    const userId = user ? user.id : '';
+
                     const response = await fetch('/api/user/self', {
                         method: 'GET',
                         headers: {
                             'Content-Type': 'application/json',
+                            'new-api-user': String(userId)
                         },
                     });
                     return await response.json();
@@ -436,13 +444,46 @@ class AnyRouterCheckin:
 
             if result.get('success'):
                 return result.get('data', {})
+            else:
+                logger.warning(f"获取用户信息失败: {result.get('message', '未知错误')}")
             return None
 
         except Exception as e:
-            logger.debug(f"获取用户信息失败: {str(e)}")
+            logger.warning(f"获取用户信息异常: {str(e)}")
             return None
 
-    def process_account(self, account: Dict) -> bool:
+    def get_tokens(self) -> List[Dict]:
+        """获取令牌列表"""
+        try:
+            result = self.page.evaluate("""
+                async () => {
+                    // 从 localStorage 获取用户 ID
+                    const userStr = localStorage.getItem('user');
+                    const user = userStr ? JSON.parse(userStr) : null;
+                    const userId = user ? user.id : '';
+
+                    const response = await fetch('/api/token/?p=0&size=100', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'new-api-user': String(userId)
+                        },
+                    });
+                    return await response.json();
+                }
+            """)
+
+            if result.get('success'):
+                return result.get('data', [])
+            else:
+                logger.warning(f"获取令牌列表失败: {result.get('message', '未知错误')}")
+            return []
+
+        except Exception as e:
+            logger.warning(f"获取令牌列表异常: {str(e)}")
+            return []
+
+    def process_account(self, account: Dict) -> Dict:
         """
         处理单个账号的签到流程
 
@@ -450,14 +491,27 @@ class AnyRouterCheckin:
             account: 账号信息字典
 
         Returns:
-            是否成功
+            包含账号信息的字典，包括：
+            - username: 用户名
+            - success: 签到是否成功
+            - user_id: 用户ID
+            - quota: 账户余额
+            - tokens: 令牌列表
         """
         username = account.get('username')
         password = account.get('password')
 
+        result = {
+            'username': username,
+            'success': False,
+            'user_id': None,
+            'quota': 0,
+            'tokens': []
+        }
+
         if not username or not password:
             logger.error("❌ 账号配置错误: 缺少用户名或密码")
-            return False
+            return result
 
         logger.info(f"\n{'='*50}")
         logger.info(f"开始处理账号: {username}")
@@ -469,29 +523,47 @@ class AnyRouterCheckin:
 
             # 登录
             if not self.login(username, password):
-                return False
+                return result
 
             self.random_delay(2, 4)
 
             # 获取用户信息
             user_info = self.get_user_info()
             if user_info:
-                logger.info(f"   用户ID: {user_info.get('id')}")
-                logger.info(f"   当前额度: {user_info.get('quota', 0)}")
+                result['user_id'] = user_info.get('id')
+                result['quota'] = user_info.get('quota', 0)
+                quota_usd = result['quota'] / 500000  # 转换为美元 (500000 = $1)
+                logger.info(f"   用户ID: {result['user_id']}")
+                logger.info(f"   账户余额: ${quota_usd:.2f}")
+
+            # 获取令牌列表
+            tokens = self.get_tokens()
+            if tokens:
+                result['tokens'] = tokens
+                for token in tokens:
+                    token_name = token.get('name', '未命名')
+                    token_key = token.get('key', '')
+                    token_quota = token.get('remain_quota', 0) / 500000  # 转换为美元
+                    # 脱敏显示
+                    masked_key = f"sk-{token_key[:4]}****{token_key[-4:]}" if len(token_key) > 8 else f"sk-{token_key}"
+                    logger.info(f"   令牌: {token_name} (余额: ${token_quota:.2f}, 密钥: {masked_key})")
 
             # 签到
-            result = self.checkin()
+            checkin_success = self.checkin()
 
             # 签到后再次获取用户信息，查看额度变化
-            if result:
+            if checkin_success:
                 self.random_delay(1, 2)
                 new_info = self.get_user_info()
                 if new_info and user_info:
                     old_quota = user_info.get('quota', 0)
                     new_quota = new_info.get('quota', 0)
+                    result['quota'] = new_quota  # 更新为最新余额
                     if new_quota > old_quota:
-                        logger.info(f"   额度变化: {old_quota} → {new_quota} (+{new_quota - old_quota})")
+                        diff = (new_quota - old_quota) / 500000  # 转换为美元
+                        logger.info(f"   签到奖励: +${diff:.2f}")
 
+            result['success'] = checkin_success
             return result
 
         finally:
@@ -549,12 +621,147 @@ def load_config(config_file: str = "config/accounts.json") -> Dict:
         return {}
 
 
+def mask_token_key(key: str) -> str:
+    """令牌密钥脱敏"""
+    if len(key) > 8:
+        return f"sk-{key[:4]}****{key[-4:]}"
+    return f"sk-{key}"
+
+
+def generate_reports(accounts_data: List[Dict], show_keys: bool = False):
+    """
+    生成账号汇总报告
+
+    Args:
+        accounts_data: 账号信息列表
+        show_keys: 是否在CSV中显示完整密钥
+    """
+    if not accounts_data:
+        return
+
+    # 创建报告目录
+    report_dir = Path(__file__).parent / "reports"
+    report_dir.mkdir(exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    date_str = datetime.now().strftime('%Y%m%d')
+
+    # 1. 生成 JSON 文件（完整信息，方便程序调取）
+    json_file = report_dir / f"tokens_{date_str}.json"
+    tokens_data = []
+
+    for account in accounts_data:
+        username = account.get('username')
+        for token in account.get('tokens', []):
+            tokens_data.append({
+                'username': username,
+                'user_id': account.get('user_id'),
+                'account_quota_raw': account.get('quota', 0),  # 原始值
+                'account_quota_usd': account.get('quota', 0) / 500000,  # 美元
+                'token_name': token.get('name', ''),
+                'token_key': f"sk-{token.get('key', '')}",  # 完整密钥
+                'token_quota_raw': token.get('remain_quota', 0),  # 原始值
+                'token_quota_usd': token.get('remain_quota', 0) / 500000,  # 美元
+                'used_quota_raw': token.get('used_quota', 0),
+                'used_quota_usd': token.get('used_quota', 0) / 500000,
+                'status': token.get('status', 0),
+                'expired_time': token.get('expired_time', 0),
+                'created_time': token.get('created_time', 0),
+                'checkin_success': account.get('success', False)
+            })
+
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump(tokens_data, f, ensure_ascii=False, indent=2)
+
+    # 设置文件权限为 600（仅所有者可读写）
+    os.chmod(json_file, 0o600)
+
+    # 2. 生成 CSV 文件（方便查看）
+    csv_file = report_dir / f"summary_{date_str}.csv"
+
+    with open(csv_file, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['账号', '用户ID', '账户余额($)', '令牌名称', '令牌余额($)', '已用额度($)', '令牌密钥', '签到结果'])
+
+        for account in accounts_data:
+            username = account.get('username')
+            user_id = account.get('user_id', '')
+            account_quota = account.get('quota', 0) / 500000  # 转换为美元
+            checkin_result = '成功' if account.get('success') else '失败'
+            tokens = account.get('tokens', [])
+
+            if tokens:
+                for token in tokens:
+                    token_name = token.get('name', '')
+                    token_quota = token.get('remain_quota', 0) / 500000
+                    used_quota = token.get('used_quota', 0) / 500000
+                    token_key = token.get('key', '')
+
+                    if show_keys:
+                        display_key = f"sk-{token_key}"
+                    else:
+                        display_key = mask_token_key(token_key)
+
+                    writer.writerow([username, user_id, f"{account_quota:.2f}", token_name,
+                                   f"{token_quota:.2f}", f"{used_quota:.2f}", display_key, checkin_result])
+            else:
+                writer.writerow([username, user_id, f"{account_quota:.2f}", '', '', '', '', checkin_result])
+
+    # 3. 按额度分类生成令牌文件
+    keys_by_quota = {}  # {额度: [令牌列表]}
+
+    for account in accounts_data:
+        for token in account.get('tokens', []):
+            token_key = token.get('key', '')
+            if token_key:
+                quota_usd = token.get('remain_quota', 0) / 500000
+                # 四舍五入到整数美元作为分类键
+                quota_key = int(round(quota_usd))
+                if quota_key not in keys_by_quota:
+                    keys_by_quota[quota_key] = []
+                keys_by_quota[quota_key].append(f"sk-{token_key}")
+
+    # 为每个额度生成单独的文件
+    keys_dir = report_dir / "keys"
+    keys_dir.mkdir(exist_ok=True)
+
+    generated_files = []
+    for quota, keys in sorted(keys_by_quota.items(), reverse=True):
+        if keys:
+            keys_file = keys_dir / f"keys_{quota}usd.txt"
+            with open(keys_file, 'w', encoding='utf-8') as f:
+                for key in keys:
+                    f.write(f"{key}\n")
+            os.chmod(keys_file, 0o600)
+            generated_files.append((quota, len(keys), keys_file))
+
+    # 同时生成一个汇总的所有令牌文件
+    all_keys_file = report_dir / f"keys_{date_str}.txt"
+    with open(all_keys_file, 'w', encoding='utf-8') as f:
+        for quota in sorted(keys_by_quota.keys(), reverse=True):
+            f.write(f"# === ${quota} ===\n")
+            for key in keys_by_quota[quota]:
+                f.write(f"{key}\n")
+            f.write("\n")
+    os.chmod(all_keys_file, 0o600)
+
+    logger.info(f"\n📊 报告已生成:")
+    logger.info(f"   汇总表格: {csv_file}")
+    logger.info(f"   完整数据: {json_file}")
+    logger.info(f"   所有令牌: {all_keys_file}")
+    logger.info(f"   按额度分类:")
+    for quota, count, filepath in generated_files:
+        logger.info(f"      ${quota}: {count} 个令牌 → {filepath.name}")
+
+
 def main():
     """主函数"""
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='AnyRouter 自动签到脚本')
     parser.add_argument('-c', '--config', default='config/accounts.json',
                         help='配置文件路径 (默认: config/accounts.json)')
+    parser.add_argument('--show-keys', action='store_true',
+                        help='在 CSV 报告中显示完整令牌密钥')
     args = parser.parse_args()
 
     logger.info("="*60)
@@ -605,9 +812,10 @@ def main():
         logger.info(f"全局代理: {global_proxy}")
     logger.info("")
 
-    # 处理每个账号
+    # 处理每个账号，收集信息
     success_count = 0
     fail_count = 0
+    accounts_data = []  # 收集所有账号信息用于生成报告
 
     for i, account in enumerate(valid_accounts, 1):
         # 优先使用账号自己的代理，否则使用全局代理
@@ -615,7 +823,10 @@ def main():
 
         checker = AnyRouterCheckin(headless=headless, proxy=account_proxy)
 
-        if checker.process_account(account):
+        result = checker.process_account(account)
+        accounts_data.append(result)
+
+        if result.get('success'):
             success_count += 1
         else:
             fail_count += 1
@@ -633,6 +844,9 @@ def main():
     logger.info(f"成功: {success_count} 个")
     logger.info(f"失败: {fail_count} 个")
     logger.info("="*60)
+
+    # 生成报告
+    generate_reports(accounts_data, show_keys=args.show_keys)
 
 
 if __name__ == "__main__":
