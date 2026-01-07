@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "min_delay": 300,
+    "max_delay": 600,
+    "headless": true,
+    "proxy": "http://127.0.0.1:7890"
+  },
+  "accounts": [
+    {"username": "账号16", "password": "密码16"},
+    {"username": "账号17", "password": "密码17"},
+    {"username": "账号18", "password": "密码18"},
+    {"username": "账号19", "password": "密码19"},
+    {"username": "账号20", "password": "密码20"},
+    {"username": "账号21", "password": "密码21"},
+    {"username": "账号22", "password": "密码22"},
+    {"username": "账号23", "password": "密码23"},
+    {"username": "账号24", "password": "密码24"},
+    {"username": "账号25", "password": "密码25"},
+    {"username": "账号26", "password": "密码26"},
+    {"username": "账号27", "password": "密码27"},
+    {"username": "账号28", "password": "密码28"},
+    {"username": "账号29", "password": "密码29"},
+    {"username": "账号30", "password": "密码30"}
+  ]
+}

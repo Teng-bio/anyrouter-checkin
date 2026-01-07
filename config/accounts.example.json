@@ -1,0 +1,19 @@
+{
+  "settings": {
+    "min_delay": 60,
+    "max_delay": 180,
+    "headless": true,
+    "proxy": null
+  },
+  "accounts": [
+    {
+      "username": "your_username_1",
+      "password": "your_password_1"
+    },
+    {
+      "username": "your_username_2",
+      "password": "your_password_2",
+      "proxy": "http://proxy2:port"
+    }
+  ]
+}
