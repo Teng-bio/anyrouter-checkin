@@ -1,0 +1,18 @@
+[
+  {
+    "username": "ld123",
+    "user_id": 125919,
+    "account_quota_raw": 72604444,
+    "account_quota_usd": 145.208888,
+    "token_name": "cc",
+    "token_key": "sk-VOsuEDwpOGUTzjZBQmI9tVgDXqyyHaH09uiJpPENydGkpKNs",
+    "token_quota_raw": 435104444,
+    "token_quota_usd": 870.208888,
+    "used_quota_raw": 64895556,
+    "used_quota_usd": 129.791112,
+    "status": 1,
+    "expired_time": -1,
+    "created_time": 1767146756,
+    "checkin_success": true
+  }
+]
