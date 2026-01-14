@@ -3,7 +3,17 @@
     "min_delay": 60,
     "max_delay": 180,
     "headless": true,
-    "proxy": null
+    "proxy": null,
+    "retry_delay_hours": 1,
+    "max_retries": 2,
+    "email": {
+      "enabled": false,
+      "smtp_server": "smtp.qq.com",
+      "smtp_port": 465,
+      "sender": "your_email@qq.com",
+      "password": "your_smtp_password",
+      "receiver": "receive_email@example.com"
+    }
   },
   "accounts": [
     {

@@ -3,7 +3,17 @@
     "min_delay": 300,
     "max_delay": 600,
     "headless": true,
-    "proxy": "http://127.0.0.1:7890"
+    "proxy": "http://127.0.0.1:7890",
+    "retry_delay_hours": 1,
+    "max_retries": 2,
+    "email": {
+      "enabled": true,
+      "smtp_server": "smtp.qq.com",
+      "smtp_port": 465,
+      "sender": "835845787@qq.com",
+      "password": "aucdudgppwxhbdad",
+      "receiver": "835845787@qq.com"
+    }
   },
   "accounts": [
     {"username": "ghx", "password": "ghx123456"},

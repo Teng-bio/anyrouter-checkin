@@ -3,16 +3,25 @@
     "min_delay": 300,
     "max_delay": 600,
     "headless": true,
-    "proxy": "http://127.0.0.1:7890"
+    "proxy": "http://127.0.0.1:7890",
+    "retry_delay_hours": 1,
+    "max_retries": 2,
+    "email": {
+      "enabled": true,
+      "smtp_server": "smtp.qq.com",
+      "smtp_port": 465,
+      "sender": "835845787@qq.com",
+      "password": "aucdudgppwxhbdad",
+      "receiver": "835845787@qq.com"
+    }
   },
   "accounts": [
     {"username": "ld123", "password": "liuda20020501"},
-    {"username": "账号17", "password": "密码17"},
-    {"username": "账号18", "password": "密码18"},
-    {"username": "账号19", "password": "密码19"},
-    {"username": "账号20", "password": "密码20"},
-    {"username": "账号21", "password": "密码21"},
-    {"username": "账号22", "password": "密码22"},
+    {"username": "shijian581", "password": "shijian581"},
+    {"username": "shining567", "password": "shining567"},
+    {"username": "wangtingt767", "password": "wangtingt767"},
+    {"username": "nixiuzhen645", "password": "nixiuzhen645"},
+    {"username": "liuhui248", "password": "liuhui248"},
     {"username": "账号23", "password": "密码23"},
     {"username": "账号24", "password": "密码24"},
     {"username": "账号25", "password": "密码25"},

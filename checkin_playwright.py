@@ -20,6 +20,9 @@ import logging
 import argparse
 import csv
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -754,6 +757,169 @@ def generate_reports(accounts_data: List[Dict], show_keys: bool = False):
         logger.info(f"      ${quota}: {count} 个令牌 → {filepath.name}")
 
 
+def send_email_report(accounts_data: List[Dict], failed_accounts: List[str], email_config: Dict):
+    """
+    发送邮件报告（仅在有失败账号时发送）
+
+    Args:
+        accounts_data: 账号签到结果列表
+        failed_accounts: 失败的账号用户名列表
+        email_config: 邮件配置
+    """
+    if not email_config or not email_config.get('enabled'):
+        return
+
+    # 只有在有失败账号时才发送邮件
+    if not failed_accounts:
+        logger.info("📧 所有账号签到成功，跳过邮件通知")
+        return
+
+    try:
+        smtp_server = email_config.get('smtp_server', 'smtp.qq.com')
+        smtp_port = email_config.get('smtp_port', 465)
+        sender = email_config.get('sender')
+        password = email_config.get('password')
+        receiver = email_config.get('receiver', sender)
+
+        if not sender or not password:
+            logger.warning("邮件配置不完整，跳过发送")
+            return
+
+        # 统计数据
+        total = len(accounts_data)
+        success = sum(1 for a in accounts_data if a.get('success'))
+        failed = total - success
+        total_quota = sum(a.get('quota', 0) for a in accounts_data) / 500000
+
+        # 构建邮件内容
+        date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        subject = f"AnyRouter 签到报告 - {success}/{total} 成功"
+        if failed > 0:
+            subject = f"⚠️ {subject}"
+
+        # HTML 邮件内容
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .summary {{ background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
+                .success {{ color: #28a745; }}
+                .failed {{ color: #dc3545; }}
+                table {{ border-collapse: collapse; width: 100%; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #4CAF50; color: white; }}
+                tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            </style>
+        </head>
+        <body>
+            <h2>AnyRouter 签到报告</h2>
+            <p>时间: {date_str}</p>
+
+            <div class="summary">
+                <h3>摘要</h3>
+                <p>总账号数: <strong>{total}</strong></p>
+                <p>签到成功: <strong class="success">{success}</strong></p>
+                <p>签到失败: <strong class="failed">{failed}</strong></p>
+                <p>总余额: <strong>${total_quota:.2f}</strong></p>
+            </div>
+        """
+
+        if failed_accounts:
+            html_content += f"""
+            <div class="failed-section">
+                <h3 class="failed">失败账号</h3>
+                <p>{', '.join(failed_accounts)}</p>
+            </div>
+            """
+
+        html_content += """
+            <h3>详细结果</h3>
+            <table>
+                <tr>
+                    <th>账号</th>
+                    <th>状态</th>
+                    <th>余额</th>
+                </tr>
+        """
+
+        for account in accounts_data:
+            status = "✅ 成功" if account.get('success') else "❌ 失败"
+            status_class = "success" if account.get('success') else "failed"
+            quota = account.get('quota', 0) / 500000
+            html_content += f"""
+                <tr>
+                    <td>{account.get('username')}</td>
+                    <td class="{status_class}">{status}</td>
+                    <td>${quota:.2f}</td>
+                </tr>
+            """
+
+        html_content += """
+            </table>
+        </body>
+        </html>
+        """
+
+        # 创建邮件
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = sender
+        msg['To'] = receiver
+
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+
+        # 发送邮件
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+
+        server.login(sender, password)
+        server.sendmail(sender, receiver, msg.as_string())
+        server.quit()
+
+        logger.info(f"📧 邮件报告已发送至: {receiver}")
+
+    except Exception as e:
+        logger.error(f"❌ 发送邮件失败: {str(e)}")
+
+
+def run_checkin_batch(accounts: List[Dict], settings: Dict) -> List[Dict]:
+    """
+    运行一批账号的签到
+
+    Args:
+        accounts: 账号列表
+        settings: 配置选项
+
+    Returns:
+        账号签到结果列表
+    """
+    min_delay = settings.get('min_delay', 60)
+    max_delay = settings.get('max_delay', 180)
+    headless = settings.get('headless', True)
+    global_proxy = settings.get('proxy', None)
+
+    accounts_data = []
+
+    for i, account in enumerate(accounts, 1):
+        account_proxy = account.get('proxy', global_proxy)
+        checker = AnyRouterCheckin(headless=headless, proxy=account_proxy)
+
+        result = checker.process_account(account)
+        accounts_data.append(result)
+
+        # 账号之间随机延迟
+        if i < len(accounts):
+            delay = random.uniform(min_delay, max_delay)
+            logger.info(f"\n⏳ 等待 {delay:.0f} 秒后处理下一个账号...\n")
+            time.sleep(delay)
+
+    return accounts_data
+
+
 def main():
     """主函数"""
     # 解析命令行参数
@@ -803,50 +969,78 @@ def main():
     min_delay = settings.get('min_delay', 60)
     max_delay = settings.get('max_delay', 180)
     headless = settings.get('headless', True)
-    global_proxy = settings.get('proxy', None)  # 全局代理
+    global_proxy = settings.get('proxy', None)
+    retry_delay_hours = settings.get('retry_delay_hours', 1)  # 重试等待时间（小时）
+    max_retries = settings.get('max_retries', 2)  # 最大重试次数
+    email_config = settings.get('email', {})  # 邮件配置
 
     logger.info(f"共加载 {len(valid_accounts)} 个有效账号")
     logger.info(f"账号间延迟: {min_delay}-{max_delay} 秒")
     logger.info(f"无头模式: {'是' if headless else '否'}")
+    logger.info(f"失败重试: 最多 {max_retries} 次，间隔 {retry_delay_hours} 小时")
     if global_proxy:
         logger.info(f"全局代理: {global_proxy}")
+    if email_config.get('enabled'):
+        logger.info(f"邮件通知: 已启用 -> {email_config.get('receiver', email_config.get('sender'))}")
     logger.info("")
 
-    # 处理每个账号，收集信息
-    success_count = 0
-    fail_count = 0
-    accounts_data = []  # 收集所有账号信息用于生成报告
+    # 第一轮签到
+    all_accounts_data = {}  # 用用户名作为 key 存储结果
+    accounts_to_process = valid_accounts.copy()
 
-    for i, account in enumerate(valid_accounts, 1):
-        # 优先使用账号自己的代理，否则使用全局代理
-        account_proxy = account.get('proxy', global_proxy)
+    for retry_round in range(max_retries + 1):
+        if retry_round > 0:
+            logger.info(f"\n{'='*60}")
+            logger.info(f"🔄 第 {retry_round} 次重试 ({len(accounts_to_process)} 个失败账号)")
+            logger.info(f"{'='*60}\n")
 
-        checker = AnyRouterCheckin(headless=headless, proxy=account_proxy)
+        # 运行签到
+        results = run_checkin_batch(accounts_to_process, settings)
 
-        result = checker.process_account(account)
-        accounts_data.append(result)
+        # 更新结果
+        for result in results:
+            username = result.get('username')
+            all_accounts_data[username] = result
 
-        if result.get('success'):
-            success_count += 1
+        # 检查失败账号
+        failed_accounts = [a for a in accounts_to_process
+                         if not all_accounts_data.get(a.get('username'), {}).get('success')]
+
+        if not failed_accounts:
+            logger.info("\n✅ 所有账号签到成功!")
+            break
+
+        # 如果还有重试次数，等待后重试
+        if retry_round < max_retries:
+            wait_seconds = retry_delay_hours * 3600
+            logger.info(f"\n⏰ {len(failed_accounts)} 个账号失败，将在 {retry_delay_hours} 小时后重试...")
+            logger.info(f"   失败账号: {', '.join(a.get('username') for a in failed_accounts)}")
+            time.sleep(wait_seconds)
+            accounts_to_process = failed_accounts
         else:
-            fail_count += 1
+            logger.warning(f"\n⚠️  {len(failed_accounts)} 个账号最终失败")
 
-        # 账号之间随机延迟
-        if i < len(valid_accounts):
-            delay = random.uniform(min_delay, max_delay)
-            logger.info(f"\n⏳ 等待 {delay:.0f} 秒后处理下一个账号...\n")
-            time.sleep(delay)
+    # 汇总结果
+    final_results = list(all_accounts_data.values())
+    success_count = sum(1 for r in final_results if r.get('success'))
+    fail_count = len(final_results) - success_count
+    failed_usernames = [r.get('username') for r in final_results if not r.get('success')]
 
     # 统计结果
     logger.info("\n" + "="*60)
     logger.info("签到完成!")
-    logger.info(f"总计: {len(valid_accounts)} 个账号")
+    logger.info(f"总计: {len(final_results)} 个账号")
     logger.info(f"成功: {success_count} 个")
     logger.info(f"失败: {fail_count} 个")
+    if failed_usernames:
+        logger.info(f"失败账号: {', '.join(failed_usernames)}")
     logger.info("="*60)
 
     # 生成报告
-    generate_reports(accounts_data, show_keys=args.show_keys)
+    generate_reports(final_results, show_keys=args.show_keys)
+
+    # 发送邮件报告
+    send_email_report(final_results, failed_usernames, email_config)
 
 
 if __name__ == "__main__":
