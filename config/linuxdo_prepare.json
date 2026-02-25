@@ -1,23 +1,12 @@
 {
   "settings": {
-    "min_delay": 300,
-    "max_delay": 600,
-    "headless": true,
-    "proxy": "http://127.0.0.1:7890",
-    "retry_delay_hours": 1,
-    "max_retries": 2,
-    "email": {
-      "enabled": true,
-      "smtp_server": "smtp.qq.com",
-      "smtp_port": 465,
-      "sender": "835845787@qq.com",
-      "password": "aucdudgppwxhbdad",
-      "receiver": "835845787@qq.com"
-    }
+    "headless": false,
+    "min_delay": 5,
+    "max_delay": 10,
+    "max_retries": 0,
+    "retry_delay_hours": 1
   },
   "accounts": [
-    {"username": "ghx", "password": "ghx123456"},
-    {"username": "teng", "password": "13706357846lt"},
     {
       "username": "runanytime_oauth",
       "password": "",
@@ -125,19 +114,6 @@
         "user_api_path": "/api/user/self",
         "tokens_api_path": "/api/token/?p=0&size=100"
       }
-    },
-    {"username": "账号3", "password": "密码3"},
-    {"username": "账号4", "password": "密码4"},
-    {"username": "账号5", "password": "密码5"},
-    {"username": "账号6", "password": "密码6"},
-    {"username": "账号7", "password": "密码7"},
-    {"username": "账号8", "password": "密码8"},
-    {"username": "账号9", "password": "密码9"},
-    {"username": "账号10", "password": "密码10"},
-    {"username": "账号11", "password": "密码11"},
-    {"username": "账号12", "password": "密码12"},
-    {"username": "账号13", "password": "密码13"},
-    {"username": "账号14", "password": "密码14"},
-    {"username": "账号15", "password": "密码15"}
+    }
   ]
 }

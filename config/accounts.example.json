@@ -4,6 +4,20 @@
     "max_delay": 180,
     "headless": true,
     "proxy": null,
+    "site": {
+      "name": "anyrouter",
+      "base_url": "https://anyrouter.top",
+      "login_path": "/login",
+      "console_path": "/console",
+      "checkin_api_path": "/api/user/sign_in",
+      "user_api_path": "/api/user/self",
+      "tokens_api_path": "/api/token/?p=0&size=100",
+      "auth_mode": "local",
+      "linuxdo_entry_path": "/register",
+      "linuxdo_button_text": "使用 LinuxDo 继续",
+      "manual_auth_timeout_sec": 180,
+      "storage_state_path": null
+    },
     "retry_delay_hours": 1,
     "max_retries": 2,
     "email": {
@@ -24,6 +38,21 @@
       "username": "your_username_2",
       "password": "your_password_2",
       "proxy": "http://proxy2:port"
+    },
+    {
+      "username": "your_runanytime_user",
+      "password": "",
+      "site": {
+        "name": "runanytime",
+        "base_url": "https://runanytime.hxi.me",
+        "auth_mode": "linuxdo",
+        "linuxdo_entry_path": "/register",
+        "linuxdo_button_text": "使用 LinuxDo 继续",
+        "manual_auth_timeout_sec": 300,
+        "storage_state_path": "config/states/runanytime_ghx.json",
+        "console_path": "/console/personal",
+        "checkin_api_path": "/api/user/sign_in"
+      }
     }
   ]
 }

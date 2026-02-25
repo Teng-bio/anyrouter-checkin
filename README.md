@@ -2,10 +2,13 @@
 
 自动化签到脚本，使用 Playwright 无头浏览器模拟真实用户行为，支持多账号批量操作。
 
+👉 完整流程请看：`工作手册.md`
+
 ## 功能特点
 
 - ✅ 使用 Playwright 无头浏览器，自动处理阿里云 CDN JavaScript 验证
 - ✅ 支持多账号批量签到
+- ✅ 支持多站点混合签到（账号级站点配置）
 - ✅ 支持分批执行（不同配置文件）
 - ✅ 自动跳过无效/占位符账号
 - ✅ 支持代理配置（全局和单账号）
@@ -83,12 +86,35 @@ nano config/accounts.json  # 或使用其他编辑器
     "min_delay": 300,
     "max_delay": 600,
     "headless": true,
-    "proxy": "http://127.0.0.1:7890"
+    "proxy": "http://127.0.0.1:7890",
+    "site": {
+      "name": "anyrouter",
+      "base_url": "https://anyrouter.top",
+      "login_path": "/login",
+      "console_path": "/console",
+      "checkin_api_path": "/api/user/sign_in",
+      "user_api_path": "/api/user/self",
+      "tokens_api_path": "/api/token/?p=0&size=100",
+      "auth_mode": "local"
+    }
   },
   "accounts": [
     {"username": "用户名1", "password": "密码1"},
     {"username": "用户名2", "password": "密码2"},
-    {"username": "用户名3", "password": "密码3", "proxy": "http://other-proxy:port"}
+    {
+      "username": "runanytime_ghx",
+      "site": {
+        "name": "runanytime",
+        "base_url": "https://runanytime.hxi.me",
+        "auth_mode": "linuxdo",
+        "linuxdo_entry_path": "/register",
+        "linuxdo_button_text": "使用 LinuxDo 继续",
+        "manual_auth_timeout_sec": 300,
+        "storage_state_path": "config/states/runanytime_ghx.json",
+        "console_path": "/console/personal",
+        "checkin_api_path": "/api/user/sign_in"
+      }
+    }
   ]
 }
 ```
@@ -101,6 +127,10 @@ nano config/accounts.json  # 或使用其他编辑器
 | `max_delay` | 账号间最大延迟（秒） | 180 |
 | `headless` | 是否使用无头模式 | true |
 | `proxy` | 全局代理地址 | null |
+| `settings.site` | 全局站点配置（域名、接口路径） | AnyRouter 默认值 |
+| `accounts[].site` | 单账号站点覆盖（用于多站点混跑） | 继承 `settings.site` |
+| `site.auth_mode` | 认证模式：`local` 或 `linuxdo` | `local` |
+| `site.storage_state_path` | 登录态缓存文件（OAuth 推荐） | null |
 
 **代理格式支持：**
 - `http://ip:port`
@@ -108,6 +138,62 @@ nano config/accounts.json  # 或使用其他编辑器
 - `socks5://ip:port`
 
 **账号级代理：** 单个账号可以设置自己的 `proxy`，会覆盖全局设置。
+
+### 2.1 多站点集成（含 runanytime）
+
+脚本已支持一个配置文件中混合多个站点。  
+如果 `https://runanytime.hxi.me` 的签到接口和 AnyRouter 不同，只需改账号里的 `site.checkin_api_path`。
+
+常用可调字段：
+
+- `site.base_url`: 站点域名
+- `site.login_path`: 登录页路径（默认 `/login`）
+- `site.console_path`: 登录后页面路径（默认 `/console`）
+- `site.checkin_api_path`: 签到 API 路径（默认 `/api/user/sign_in`）
+- `site.user_api_path`: 用户信息 API 路径（默认 `/api/user/self`）
+- `site.tokens_api_path`: 令牌列表 API 路径（默认 `/api/token/?p=0&size=100`）
+
+### 2.2 LinuxDo 授权登录（无用户名密码）
+
+`runanytime` 这类站点可使用：
+- `auth_mode: linuxdo`
+- 会自动尝试 `linuxdo_entry_path`、`/login`、`/register` 入口
+- 首次运行必须使用可视化浏览器，手动完成人机验证和 LinuxDo 授权
+- 授权成功后会自动保存 `storage_state_path`，后续可用无头模式复用登录态
+- 页面显示“注册”不影响，`使用 LinuxDo 继续` 是统一 OAuth 入口，已注册用户也走这个入口登录
+
+示例：
+
+```json
+{
+  "username": "runanytime_ghx",
+  "site": {
+    "name": "runanytime",
+    "base_url": "https://runanytime.hxi.me",
+    "auth_mode": "linuxdo",
+    "linuxdo_entry_path": "/register",
+    "linuxdo_button_text": "使用 LinuxDo 继续",
+    "manual_auth_timeout_sec": 300,
+    "storage_state_path": "config/states/runanytime_ghx.json",
+    "console_path": "/console/personal",
+    "checkin_api_path": "/api/user/sign_in"
+  }
+}
+```
+
+首次准备登录态（只授权，不签到）：
+
+```bash
+# 指定账号做 LinuxDo 授权准备（会弹浏览器）
+python checkin_playwright.py -c config/accounts.json --prepare-linuxdo --account runanytime_ghx
+```
+
+授权完成后日常运行：
+
+```bash
+# 复用保存的 storage_state 执行正常签到
+python checkin_playwright.py -c config/accounts.json --account runanytime_ghx
+```
 
 ### 3. 测试运行
 
@@ -120,6 +206,12 @@ python checkin_playwright.py
 
 # 使用指定配置文件运行
 python checkin_playwright.py -c config/batch1.json
+
+# 只准备 LinuxDo 登录态（可视化授权）
+python checkin_playwright.py -c config/accounts.json --prepare-linuxdo --account runanytime_ghx
+
+# 仅运行单个账号
+python checkin_playwright.py -c config/accounts.json --account ghx
 
 # 在 CSV 报告中显示完整令牌密钥
 python checkin_playwright.py --show-keys
@@ -254,6 +346,7 @@ with open('reports/tokens_$(date +%Y%m%d).json') as f:
 
 ```json
 {
+  "site": "https://anyrouter.top",
   "username": "user1",
   "user_id": 128958,
   "account_quota_raw": 62500000,
@@ -282,6 +375,12 @@ python checkin_playwright.py
 
 # 运行签到（指定配置）
 python checkin_playwright.py -c config/batch1.json
+
+# 仅执行 LinuxDo 授权准备（不签到）
+python checkin_playwright.py -c config/accounts.json --prepare-linuxdo --account runanytime_ghx
+
+# 仅执行单账号
+python checkin_playwright.py -c config/accounts.json --account ghx
 
 # 在 CSV 中显示完整令牌
 python checkin_playwright.py --show-keys
@@ -364,7 +463,8 @@ AnyRouter 自动签到脚本 (Playwright 版本)
 ## 无效账号自动跳过
 
 脚本会自动跳过以下类型的占位符账号：
-- 用户名或密码为空
+- `local` 模式下用户名或密码为空
+- `linuxdo` 模式下用户名为空
 - 包含 "账号"、"密码"、"username"、"password"、"your_" 等占位符
 
 这样你可以在配置文件中保留模板格式，只需要填入真实账号即可。
@@ -393,6 +493,12 @@ AnyRouter 自动签到脚本 (Playwright 版本)
 2. 检查网络连接和代理设置
 3. 查看 `screenshots/` 目录下的截图
 4. 尝试设置 `"headless": false` 查看浏览器操作
+
+### LinuxDo 登录失败 / 真人验证卡住
+1. 先执行 `--prepare-linuxdo`，并确保 `settings.headless` 或运行模式为可视化浏览器
+2. 在浏览器中手动勾选 Cloudflare 人机验证，再完成 LinuxDo 授权
+3. 确认 `site.storage_state_path` 已生成（首次成功后会自动保存）
+4. 再切回无头运行日常签到；若过期，重复步骤 1-3
 
 ### 签到失败
 1. 检查是否已经签到过（会提示"今日已签到"）

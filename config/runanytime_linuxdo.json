@@ -1,0 +1,27 @@
+{
+  "settings": {
+    "headless": false,
+    "min_delay": 60,
+    "max_delay": 120,
+    "max_retries": 0
+  },
+  "accounts": [
+    {
+      "username": "runanytime_oauth",
+      "password": "",
+      "site": {
+        "name": "runanytime",
+        "base_url": "https://runanytime.hxi.me",
+        "auth_mode": "linuxdo",
+        "linuxdo_entry_path": "/register",
+        "linuxdo_button_text": "使用 LinuxDo 继续",
+        "manual_auth_timeout_sec": 300,
+        "storage_state_path": "config/states/runanytime_oauth.json",
+        "console_path": "/console/personal",
+        "checkin_api_path": "/api/user/sign_in",
+        "user_api_path": "/api/user/self",
+        "tokens_api_path": "/api/token/?p=0&size=100"
+      }
+    }
+  ]
+}

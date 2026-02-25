@@ -4,6 +4,10 @@ config/accounts.json
 # 日志文件
 logs/
 *.log
+screenshots/
+config/states/
+reports/
+config/*_tmp.json
 
 # Python
 __pycache__/
